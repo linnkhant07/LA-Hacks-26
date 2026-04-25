@@ -47,7 +47,7 @@ Schema:
 User request: """ + user_prompt
 
     response = client.models.generate_content(
-        model="gemini-3.1-pro-preview", # or "gemini-3.1-image-flash-preview" if you want to test image generation
+        model="gemini-3.1-flash-image-preview", # or "gemini-3.1-pro-preview" for better quality
         contents=system_prompt,
     )
 
