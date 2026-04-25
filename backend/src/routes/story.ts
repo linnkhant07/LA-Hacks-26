@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { Story } from '@/types';
-import { database } from '@/config/database';
+import { Story } from '../types';
+import { database } from '../config/database';
 import { ObjectId } from 'mongodb';
 
 const router = Router();
@@ -33,50 +33,26 @@ router.get('/:id', async (req, res) => {
       return res.json(fakeStory);
     }
 
-    // TODO: Fetch from actual database
-    // if (!database.isConnected()) {
-    //   throw new Error('Database not connected');
-    // }
+    // Fetch from actual database
+    if (!database.isConnected()) {
+      throw new Error('Database not connected');
+    }
 
-    // const story = await database.getDb()
-    //   .collection<Story>('stories')
-    //   .findOne({ _id: new ObjectId(id) });
+    const story = await database.getDb()
+      .collection<Story>('stories')
+      .findOne({ _id: id });
 
-    // if (!story) {
-    //   return res.status(404).json({
-    //     error: 'Story not found'
-    //   });
-    // }
+    if (!story) {
+      return res.status(404).json({
+        error: 'Story not found'
+      });
+    }
 
-    // For now, return a generated story based on ID pattern
-    const mockStory: Story = {
-      _id: id,
-      title: 'Generated Story',
-      topic: 'tornadoes',
-      narrator: {
-        type: 'animal',
-        character: 'fox',
-        voice_id: ''
-      },
-      pages: [
-        {
-          page_id: 'p1',
-          narration: 'This is a generated story from the backend API!',
-          image_prompt: 'A placeholder generated story image',
-          image_url: 'https://placehold.co/800x500/2d0b00/white?text=Generated+Story',
-          audio_url: '',
-          hotspots: [],
-          choice: null
-        }
-      ],
-      cyu: []
-    };
-
-    res.json(mockStory);
+    return res.json(story);
 
   } catch (error) {
     console.error('Error fetching story:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to fetch story'
     });
   }
@@ -94,32 +70,29 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // TODO: Save to database
-    // if (!database.isConnected()) {
-    //   throw new Error('Database not connected');
-    // }
+    // Save to database
+    if (!database.isConnected()) {
+      throw new Error('Database not connected');
+    }
 
-    // const result = await database.getDb()
-    //   .collection<Story>('stories')
-    //   .insertOne({
-    //     ...story,
-    //     _id: undefined, // Let MongoDB generate ID
-    //     createdAt: new Date(),
-    //     updatedAt: new Date()
-    //   });
+    const result = await database.getDb()
+      .collection<Story>('stories')
+      .insertOne({
+        ...story,
+        _id: undefined, // Let MongoDB generate ID
+      } as any);
 
-    // For now, just simulate saving
-    const storyId = `story_${Date.now()}`;
+    const storyId = result.insertedId.toString();
     console.log(`Story saved with ID: ${storyId}`);
 
-    res.json({
+    return res.json({
       story_id: storyId,
       message: 'Story saved successfully'
     });
 
   } catch (error) {
     console.error('Error saving story:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to save story'
     });
   }

@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import axios from 'axios';
-import { StoryGenerationRequest, StoryGenerationResponse, Story } from '@/types';
+import { StoryGenerationRequest, StoryGenerationResponse, Story, StoryContext } from '../types';
+import { generateStoryJSON, convertToStoryModel } from '../services/gemini-story';
+import { generateAllContent } from '../services/content-generator';
+import { database } from '../config/database';
 
 const router = Router();
-
-// Python service URL
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
 
 // Generate complete story with all branches
 router.post('/', async (req, res) => {
@@ -22,35 +21,66 @@ router.post('/', async (req, res) => {
 
     console.log(`Story generation request - Topic: ${topic}, Narrator: ${narrator.character}`);
 
-    // Call Python story generation service
+    const storyId = `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     try {
-      const pythonResponse = await axios.post(`${PYTHON_SERVICE_URL}/generate-story`, {
+      // Create story context for Gemini
+      const storyContext: StoryContext = {
         topic,
-        narrator
-      }, {
-        timeout: 60000, // 60 seconds for story generation
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+        current_page: '',
+        branch_taken: null,
+        story_so_far: '',
+        narrator_character: narrator.character,
+        educational_facts_covered: [],
+        adhd_mode: true
+      };
 
-      const response: StoryGenerationResponse = pythonResponse.data;
+      // Generate story with Gemini
+      console.log('Generating story with Gemini...');
+      const rawStoryJSON = await generateStoryJSON(topic, narrator, storyContext);
 
-      // TODO: Save to MongoDB if successful
-      if (response.status === 'completed' && response.story) {
-        // await database.getDb().collection('stories').insertOne(response.story);
-        console.log(`✓ Story generated successfully: ${response.story_id}`);
+      let geminiStoryData;
+      try {
+        geminiStoryData = JSON.parse(rawStoryJSON);
+      } catch (jsonError) {
+        console.error('Invalid JSON from Gemini, falling back to fake story');
+        throw new Error('Invalid JSON from Gemini');
       }
 
-      res.json(response);
+      // Convert to our Story model
+      const story = convertToStoryModel(geminiStoryData, storyId, topic, narrator);
 
-    } catch (pythonError: any) {
-      console.error('Python service error:', pythonError.message);
+      // Generate all images and prepare audio
+      await generateAllContent(story);
 
-      // Fallback to fake story if Python service fails
+      // Save to MongoDB
+      try {
+        const { _id, ...storyData } = story;
+        const result = await database.getDb().collection('stories').insertOne({
+          ...storyData
+        } as any);
+        console.log(`✓ Saved story to MongoDB: ${result.insertedId}`);
+      } catch (dbError) {
+        console.error('Failed to save story to MongoDB:', dbError);
+        // Don't fail the request if DB save fails
+      }
+
+      const response: StoryGenerationResponse = {
+        story_id: storyId,
+        status: 'completed',
+        story,
+        message: 'Story generated successfully with Gemini!'
+      };
+
+      console.log(`✓ Story generated successfully: ${storyId}`);
+      return res.json(response);
+
+    } catch (geminiError: any) {
+      console.error('Gemini service error:', geminiError.message);
+
+      // Fallback to fake story if Gemini fails
       console.log('Falling back to fake story generation...');
 
-      const storyId = `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const story: Story = generateFakeStory(topic, narrator, storyId);
 
       const response: StoryGenerationResponse = {
@@ -60,12 +90,12 @@ router.post('/', async (req, res) => {
         message: 'Story generated successfully (fallback mode)!'
       };
 
-      res.json(response);
+      return res.json(response);
     }
 
   } catch (error) {
     console.error('Story generation error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       status: 'failed',
       message: 'Failed to generate story'
     } as StoryGenerationResponse);
@@ -77,18 +107,30 @@ router.get('/:storyId/status', async (req, res) => {
   try {
     const { storyId } = req.params;
 
-    // TODO: Check actual generation status from database
+    // Check if story exists in database
+    const story = await database.getDb().collection('stories').findOne({ _id: storyId } as any);
+
+    if (!story) {
+      return res.status(404).json({
+        story_id: storyId,
+        status: 'failed',
+        message: 'Story not found'
+      } as StoryGenerationResponse);
+    }
+
     const response: StoryGenerationResponse = {
       story_id: storyId,
       status: 'completed',
+      story: story as unknown as Story,
       message: 'Story generation completed'
     };
 
-    res.json(response);
+    return res.json(response);
 
   } catch (error) {
     console.error('Error checking generation status:', error);
-    res.status(500).json({
+    return res.status(500).json({
+      story_id: req.params.storyId || 'unknown',
       status: 'failed',
       message: 'Failed to check generation status'
     } as StoryGenerationResponse);
@@ -107,8 +149,8 @@ function generateFakeStory(topic: string, narrator: any, storyId: string): Story
           image_url: 'https://placehold.co/800x500/1a1a2e/white?text=🌪️+Tornado+Adventure+Begins!',
           audio_url: '', // Will be filled by TTS
           hotspots: [
-            { object: 'storm clouds', bbox: [500, 50, 780, 200] },
-            { object: 'narrator', bbox: [80, 280, 280, 500] },
+            { object: 'storm clouds', bbox: [500, 50, 780, 200] as [number, number, number, number] },
+            { object: 'narrator', bbox: [80, 280, 280, 500] as [number, number, number, number] },
           ],
           choice: null,
         }
@@ -124,8 +166,8 @@ function generateFakeStory(topic: string, narrator: any, storyId: string): Story
           image_url: 'https://placehold.co/800x500/2d1810/white?text=🏛️+Pyramid+Adventure+Begins!',
           audio_url: '', // Will be filled by TTS
           hotspots: [
-            { object: 'pyramid', bbox: [200, 50, 600, 400] },
-            { object: 'narrator', bbox: [50, 300, 200, 500] },
+            { object: 'pyramid', bbox: [200, 50, 600, 400] as [number, number, number, number] },
+            { object: 'narrator', bbox: [50, 300, 200, 500] as [number, number, number, number] },
           ],
           choice: null,
         }

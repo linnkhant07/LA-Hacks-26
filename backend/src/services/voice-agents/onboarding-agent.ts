@@ -156,8 +156,13 @@ export class OnboardingAgent extends BaseVoiceAgent {
       type: 'response',
       content: "Perfect! Everything is ready. Let's start your amazing learning adventure!",
       context: {
-        action: 'complete_onboarding',
-        choices: this.userChoices
+        topic: this.userChoices.topic || '',
+        current_page: '',
+        branch_taken: null,
+        story_so_far: '',
+        narrator_character: this.userChoices.narrator || '',
+        educational_facts_covered: [],
+        adhd_mode: true
       },
       timestamp: Date.now()
     });
