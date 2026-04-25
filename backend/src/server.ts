@@ -104,8 +104,8 @@ app.use('*', (req, res) => {
 async function startServer() {
   try {
     // Connect to database
-    // await database.connect();
-    console.log('Database connection skipped for development');
+    await database.connect();
+    console.log('✅ Database connected successfully');
 
     // Start HTTP server
     const server = app.listen(PORT, () => {

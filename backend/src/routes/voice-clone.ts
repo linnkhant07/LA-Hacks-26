@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { VoiceCloneRequest, VoiceCloneResponse } from '@/types';
+import { VoiceCloneRequest, VoiceCloneResponse } from '../types';
 
 const router = Router();
 
@@ -41,11 +41,11 @@ router.post('/', async (req, res) => {
       message: 'Voice clone created successfully!'
     };
 
-    res.json(response);
+    return res.json(response);
 
   } catch (error) {
     console.error('Voice cloning error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       status: 'failed',
       message: 'Failed to process voice cloning request'
     } as VoiceCloneResponse);

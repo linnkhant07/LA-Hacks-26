@@ -80,10 +80,7 @@ export interface VoiceCloneResponse {
 // Story generation types
 export interface StoryGenerationRequest {
   topic: string;
-  narrator: {
-    character: string;
-    voice_id?: string;
-  };
+  narrator: Narrator;
 }
 
 export interface StoryGenerationResponse {

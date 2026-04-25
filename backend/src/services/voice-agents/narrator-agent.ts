@@ -208,7 +208,6 @@ export class NarratorAgent extends BaseVoiceAgent {
     this.sendMessage({
       type: 'response',
       content: prompt,
-      context: { proactiveEngagement: true },
       timestamp: Date.now()
     });
   }
